@@ -44,6 +44,24 @@ export function RulesPage({
     }
   };
 
+  const handleAcceptAndStart = async () => {
+    try {
+      // Request fullscreen on document element for cross-browser compatibility
+      const docElement = document.documentElement;
+      if (docElement.requestFullscreen) {
+        await docElement.requestFullscreen();
+      } else if ((docElement as any).webkitRequestFullscreen) {
+        await (docElement as any).webkitRequestFullscreen();
+      } else if ((docElement as any).msRequestFullscreen) {
+        await (docElement as any).msRequestFullscreen();
+      }
+    } catch (err) {
+      console.warn("Fullscreen request failed:", err);
+    }
+    // Proceed with test start regardless of fullscreen success
+    onAccept();
+  };
+
   const rules = [
     {
       icon: <Clock className="h-5 w-5" />,
@@ -202,7 +220,7 @@ export function RulesPage({
             </Button>
             <Button
               variant="gradient"
-              onClick={onAccept}
+              onClick={handleAcceptAndStart}
               disabled={!hasScrolledToBottom || !hasAccepted}
             >
               <Play className="mr-2 h-4 w-4" />

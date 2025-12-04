@@ -60,6 +60,7 @@ export default function TestTaking() {
   const [autosaveStatus, setAutosaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [codeOutput, setCodeOutput] = useState<string>("");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const assignment = assignments.find((a) => a.id === assignmentId);
@@ -120,13 +121,18 @@ export default function TestTaking() {
     }
   }, [session?.currentQuestionIndex, test, markQuestionVisited]);
 
-  // Fullscreen handling
+  // Fullscreen handling with cross-browser support
   const enterFullscreen = useCallback(async () => {
     try {
-      if (containerRef.current) {
-        await containerRef.current.requestFullscreen();
-        setIsFullscreen(true);
+      const docElement = document.documentElement;
+      if (docElement.requestFullscreen) {
+        await docElement.requestFullscreen();
+      } else if ((docElement as any).webkitRequestFullscreen) {
+        await (docElement as any).webkitRequestFullscreen();
+      } else if ((docElement as any).msRequestFullscreen) {
+        await (docElement as any).msRequestFullscreen();
       }
+      setIsFullscreen(true);
     } catch (err) {
       toast({
         title: "Fullscreen unavailable",
@@ -138,8 +144,14 @@ export default function TestTaking() {
 
   const exitFullscreen = useCallback(async () => {
     try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
+      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        } else if ((document as any).msExitFullscreen) {
+          await (document as any).msExitFullscreen();
+        }
         setIsFullscreen(false);
       }
     } catch (err) {
@@ -147,21 +159,36 @@ export default function TestTaking() {
     }
   }, []);
 
+  // Monitor fullscreen state changes and show warning
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-      if (!document.fullscreenElement && session?.state === "ACTIVE") {
+      const isCurrentlyFullscreen = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+      setIsFullscreen(isCurrentlyFullscreen);
+      
+      // Show warning if user exits fullscreen during active test
+      if (!isCurrentlyFullscreen && session?.state === "ACTIVE") {
+        setShowFullscreenWarning(true);
         toast({
-          title: "Fullscreen exited",
-          description: "For the best experience, please stay in fullscreen mode.",
+          title: "⚠️ Fullscreen exited",
+          description: "Please return to fullscreen mode. Exiting may be flagged as suspicious activity.",
           variant: "destructive",
         });
       }
     };
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+    };
   }, [session?.state]);
+
+  // Check initial fullscreen state on mount
+  useEffect(() => {
+    setIsFullscreen(!!(document.fullscreenElement || (document as any).webkitFullscreenElement));
+  }, []);
 
   // Tab visibility warning
   useEffect(() => {
@@ -179,16 +206,29 @@ export default function TestTaking() {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [session?.state]);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     submitTest();
     updateAssignment(assignmentId!, {
       status: "completed",
       completedAt: new Date().toISOString(),
       score: Math.floor(Math.random() * 40) + 60,
     });
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
+    
+    // Exit fullscreen with cross-browser support
+    try {
+      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        } else if ((document as any).msExitFullscreen) {
+          await (document as any).msExitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.error("Error exiting fullscreen:", err);
     }
+    
     navigate(`/candidate/test/${assignmentId}/submitted`);
   }, [submitTest, updateAssignment, assignmentId, navigate]);
 
@@ -527,6 +567,30 @@ export default function TestTaking() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleSubmit}>Submit Test</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Fullscreen Warning Dialog */}
+      <AlertDialog open={showFullscreenWarning} onOpenChange={setShowFullscreenWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Fullscreen Mode Required
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              You have exited fullscreen mode. For test integrity, please return to fullscreen. 
+              Repeated exits may be flagged as suspicious activity.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => {
+              enterFullscreen();
+              setShowFullscreenWarning(false);
+            }}>
+              Return to Fullscreen
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
