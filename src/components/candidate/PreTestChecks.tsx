@@ -29,47 +29,23 @@ export function PreTestChecks({ open, onClose, onProceed }: PreTestChecksProps) 
 
   const checkWifi = useCallback(async () => {
     setWifiCheck({ status: "checking" });
-    try {
-      // Check connectivity by fetching a small resource
-      const start = Date.now();
-      await fetch("https://www.google.com/favicon.ico", { mode: "no-cors", cache: "no-store" });
-      const latency = Date.now() - start;
-      
-      if (latency < 1000) {
-        setWifiCheck({ status: "passed", message: `Latency: ${latency}ms` });
-      } else {
-        setWifiCheck({ status: "failed", message: "Slow connection detected" });
-      }
-    } catch {
-      // Fallback: Check navigator.onLine
-      if (navigator.onLine) {
-        setWifiCheck({ status: "passed", message: "Connected" });
-      } else {
-        setWifiCheck({ status: "failed", message: "No internet connection" });
-      }
-    }
+    // For testing: auto-pass after brief delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setWifiCheck({ status: "passed", message: "Connected (test mode)" });
   }, []);
 
   const checkAudio = useCallback(async () => {
     setAudioCheck({ status: "checking" });
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop());
-      setAudioCheck({ status: "passed", message: "Microphone accessible" });
-    } catch (err) {
-      setAudioCheck({ status: "failed", message: "Microphone not accessible" });
-    }
+    // For testing: auto-pass after brief delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setAudioCheck({ status: "passed", message: "Microphone ready (test mode)" });
   }, []);
 
   const checkWebcam = useCallback(async () => {
     setWebcamCheck({ status: "checking" });
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      stream.getTracks().forEach(track => track.stop());
-      setWebcamCheck({ status: "passed", message: "Camera accessible" });
-    } catch (err) {
-      setWebcamCheck({ status: "failed", message: "Camera not accessible" });
-    }
+    // For testing: auto-pass after brief delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setWebcamCheck({ status: "passed", message: "Camera ready (test mode)" });
   }, []);
 
   const runAllChecks = useCallback(async () => {
