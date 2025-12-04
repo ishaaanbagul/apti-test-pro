@@ -12,12 +12,16 @@ export type TestSessionState =
 export interface MCQAnswer {
   questionId: string;
   selectedOption: number | null;
+  isVisited: boolean;
+  isMarkedForReview: boolean;
 }
 
 export interface CodingAnswer {
   questionId: string;
   code: string;
   language: string;
+  isVisited: boolean;
+  isMarkedForReview: boolean;
 }
 
 export interface TestSession {
@@ -48,6 +52,10 @@ interface CandidateTestState {
   saveMCQAnswer: (questionId: string, selectedOption: number) => void;
   saveCodingAnswer: (questionId: string, code: string) => void;
   
+  // Mark for review
+  toggleMarkForReview: (questionId: string) => void;
+  markQuestionVisited: (questionId: string) => void;
+  
   // Timer
   decrementTimer: () => void;
   
@@ -71,12 +79,16 @@ export const useCandidateTestStore = create<CandidateTestState>((set, get) => ({
     const mcqAnswers: MCQAnswer[] = mcqs.map((q) => ({
       questionId: q.id,
       selectedOption: null,
+      isVisited: false,
+      isMarkedForReview: false,
     }));
     
     const codingAnswers: CodingAnswer[] = codings.map((q) => ({
       questionId: q.id,
       code: q.starterCode,
       language: q.language,
+      isVisited: false,
+      isMarkedForReview: false,
     }));
     
     set({
@@ -88,7 +100,7 @@ export const useCandidateTestStore = create<CandidateTestState>((set, get) => ({
         mcqAnswers,
         codingAnswers,
         startedAt: null,
-        remainingTime: duration * 60, // Convert to seconds
+        remainingTime: duration * 60,
         lastAutosave: null,
       },
     });
@@ -149,7 +161,7 @@ export const useCandidateTestStore = create<CandidateTestState>((set, get) => ({
         session: {
           ...prev.session,
           mcqAnswers: prev.session.mcqAnswers.map((a) =>
-            a.questionId === questionId ? { ...a, selectedOption } : a
+            a.questionId === questionId ? { ...a, selectedOption, isVisited: true } : a
           ),
         },
       };
@@ -163,7 +175,61 @@ export const useCandidateTestStore = create<CandidateTestState>((set, get) => ({
         session: {
           ...prev.session,
           codingAnswers: prev.session.codingAnswers.map((a) =>
-            a.questionId === questionId ? { ...a, code } : a
+            a.questionId === questionId ? { ...a, code, isVisited: true } : a
+          ),
+        },
+      };
+    });
+  },
+  
+  toggleMarkForReview: (questionId) => {
+    set((prev) => {
+      if (!prev.session) return prev;
+      
+      const mcqAnswer = prev.session.mcqAnswers.find(a => a.questionId === questionId);
+      if (mcqAnswer) {
+        return {
+          session: {
+            ...prev.session,
+            mcqAnswers: prev.session.mcqAnswers.map((a) =>
+              a.questionId === questionId ? { ...a, isMarkedForReview: !a.isMarkedForReview } : a
+            ),
+          },
+        };
+      }
+      
+      return {
+        session: {
+          ...prev.session,
+          codingAnswers: prev.session.codingAnswers.map((a) =>
+            a.questionId === questionId ? { ...a, isMarkedForReview: !a.isMarkedForReview } : a
+          ),
+        },
+      };
+    });
+  },
+  
+  markQuestionVisited: (questionId) => {
+    set((prev) => {
+      if (!prev.session) return prev;
+      
+      const mcqAnswer = prev.session.mcqAnswers.find(a => a.questionId === questionId);
+      if (mcqAnswer) {
+        return {
+          session: {
+            ...prev.session,
+            mcqAnswers: prev.session.mcqAnswers.map((a) =>
+              a.questionId === questionId ? { ...a, isVisited: true } : a
+            ),
+          },
+        };
+      }
+      
+      return {
+        session: {
+          ...prev.session,
+          codingAnswers: prev.session.codingAnswers.map((a) =>
+            a.questionId === questionId ? { ...a, isVisited: true } : a
           ),
         },
       };

@@ -3,24 +3,26 @@ import { useTestStore } from "@/store/testStore";
 import { useCandidateTestStore } from "@/store/candidateTestStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { PreTestChecks } from "@/components/candidate/PreTestChecks";
+import { RulesPage } from "@/components/candidate/RulesPage";
 import {
   ArrowLeft,
   Clock,
   FileText,
   Code,
-  AlertTriangle,
-  CheckCircle,
   Play,
+  Shield,
 } from "lucide-react";
 import { useState } from "react";
+
+type FlowStep = "overview" | "checks" | "rules";
 
 export default function TestInstructions() {
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const navigate = useNavigate();
   const { assignments, tests } = useTestStore();
   const { initSession, setState } = useCandidateTestStore();
-  const [agreed, setAgreed] = useState(false);
+  const [flowStep, setFlowStep] = useState<FlowStep>("overview");
 
   const assignment = assignments.find((a) => a.id === assignmentId);
   const test = assignment ? tests.find((t) => t.id === assignment.testId) : null;
@@ -52,6 +54,19 @@ export default function TestInstructions() {
     setState("ACTIVE");
     navigate(`/candidate/test/${assignmentId}`);
   };
+
+  // Show rules page
+  if (flowStep === "rules") {
+    return (
+      <RulesPage
+        testName={test.name}
+        duration={test.duration}
+        totalQuestions={totalQuestions}
+        onAccept={handleStartTest}
+        onBack={() => setFlowStep("overview")}
+      />
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
@@ -87,44 +102,47 @@ export default function TestInstructions() {
             </div>
           </div>
 
-          {/* Instructions */}
+          {/* Quick overview */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-warning" />
-              Important Instructions
+              <Shield className="h-5 w-5 text-primary" />
+              Before You Begin
             </h3>
-            <ul className="space-y-3">
-              {[
-                "This is a timed test. Once started, the timer cannot be paused.",
-                "Ensure you have a stable internet connection before starting.",
-                "Do not refresh or close the browser during the test.",
-                "Your answers are auto-saved every 15 seconds.",
-                "You can navigate between questions using the sidebar.",
-                "For coding questions, you can run your code to see the output.",
-                "Submit your test before the timer runs out.",
-                "Any form of cheating or plagiarism will result in disqualification.",
-              ].map((instruction, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm">
-                  <CheckCircle className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
-                  <span>{instruction}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Agreement */}
-          <div className="flex items-center space-x-2 rounded-lg border p-4">
-            <Checkbox
-              id="agreement"
-              checked={agreed}
-              onCheckedChange={(checked) => setAgreed(checked as boolean)}
-            />
-            <label
-              htmlFor="agreement"
-              className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              I have read and understood all the instructions. I agree to follow the rules and understand that violations may result in disqualification.
-            </label>
+            <div className="grid gap-3">
+              <div className="flex items-start gap-3 rounded-lg border p-4">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold">
+                  1
+                </div>
+                <div>
+                  <p className="font-medium">System Check</p>
+                  <p className="text-sm text-muted-foreground">
+                    We'll verify your internet, microphone, and camera access
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-lg border p-4">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold">
+                  2
+                </div>
+                <div>
+                  <p className="font-medium">Rules & Guidelines</p>
+                  <p className="text-sm text-muted-foreground">
+                    Read and accept the test rules and proctoring requirements
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-lg border p-4">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold">
+                  3
+                </div>
+                <div>
+                  <p className="font-medium">Start Test</p>
+                  <p className="text-sm text-muted-foreground">
+                    Timer begins immediately once you start the test
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Start Button */}
@@ -132,14 +150,20 @@ export default function TestInstructions() {
             variant="gradient"
             size="xl"
             className="w-full"
-            disabled={!agreed}
-            onClick={handleStartTest}
+            onClick={() => setFlowStep("checks")}
           >
             <Play className="mr-2 h-5 w-5" />
-            Start Test
+            Begin System Check
           </Button>
         </CardContent>
       </Card>
+
+      {/* Pre-test checks modal */}
+      <PreTestChecks
+        open={flowStep === "checks"}
+        onClose={() => setFlowStep("overview")}
+        onProceed={() => setFlowStep("rules")}
+      />
     </div>
   );
 }
