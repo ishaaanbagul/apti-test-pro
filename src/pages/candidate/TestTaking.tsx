@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTestStore } from "@/store/testStore";
 import { useCandidateTestStore } from "@/store/candidateTestStore";
@@ -7,9 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { TimerDisplay } from "@/components/common/TimerDisplay";
 import { AutosaveIndicator } from "@/components/common/AutosaveIndicator";
 import { CodeEditor } from "@/components/common/CodeEditor";
+import { QuestionNavigation } from "@/components/candidate/QuestionNavigation";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +30,12 @@ import {
   Play,
   FileText,
   Code,
+  Flag,
+  Maximize,
+  Minimize,
+  AlertTriangle,
 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 export default function TestTaking() {
   const { assignmentId } = useParams<{ assignmentId: string }>();
@@ -45,11 +52,15 @@ export default function TestTaking() {
     decrementTimer,
     markAutosaved,
     submitTest,
+    toggleMarkForReview,
+    markQuestionVisited,
   } = useCandidateTestStore();
 
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [codeOutput, setCodeOutput] = useState<string>("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const assignment = assignments.find((a) => a.id === assignmentId);
   const test = assignment ? tests.find((t) => t.id === assignment.testId) : null;
@@ -78,7 +89,6 @@ export default function TestTaking() {
 
     const autosaveInterval = setInterval(() => {
       setAutosaveStatus('saving');
-      // Simulate autosave API call
       setTimeout(() => {
         markAutosaved();
         setAutosaveStatus('saved');
@@ -97,13 +107,88 @@ export default function TestTaking() {
     }
   }, [session, navigate, assignmentId]);
 
+  // Mark question as visited when navigating
+  useEffect(() => {
+    if (!session || !test) return;
+    const allQuestions = [
+      ...test.mcqQuestions.map((q) => ({ ...q, type: "mcq" as const })),
+      ...test.codingQuestions.map((q) => ({ ...q, type: "coding" as const })),
+    ];
+    const currentQuestion = allQuestions[session.currentQuestionIndex];
+    if (currentQuestion) {
+      markQuestionVisited(currentQuestion.id);
+    }
+  }, [session?.currentQuestionIndex, test, markQuestionVisited]);
+
+  // Fullscreen handling
+  const enterFullscreen = useCallback(async () => {
+    try {
+      if (containerRef.current) {
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+      }
+    } catch (err) {
+      toast({
+        title: "Fullscreen unavailable",
+        description: "Please enable fullscreen mode for the best experience.",
+        variant: "destructive",
+      });
+    }
+  }, []);
+
+  const exitFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.error("Error exiting fullscreen:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      if (!document.fullscreenElement && session?.state === "ACTIVE") {
+        toast({
+          title: "Fullscreen exited",
+          description: "For the best experience, please stay in fullscreen mode.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, [session?.state]);
+
+  // Tab visibility warning
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && session?.state === "ACTIVE") {
+        toast({
+          title: "Warning: Tab switch detected",
+          description: "Leaving the test tab may be flagged as suspicious activity.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [session?.state]);
+
   const handleSubmit = useCallback(() => {
     submitTest();
     updateAssignment(assignmentId!, {
       status: "completed",
       completedAt: new Date().toISOString(),
-      score: Math.floor(Math.random() * 40) + 60, // Mock score
+      score: Math.floor(Math.random() * 40) + 60,
     });
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    }
     navigate(`/candidate/test/${assignmentId}/submitted`);
   }, [submitTest, updateAssignment, assignmentId, navigate]);
 
@@ -132,158 +217,165 @@ export default function TestTaking() {
     (a) => a.questionId === currentQuestion?.id
   );
 
-  const answeredCount = [
-    ...session.mcqAnswers.filter((a) => a.selectedOption !== null),
-    ...session.codingAnswers.filter((a) => a.code !== (test.codingQuestions.find(q => q.id === a.questionId)?.starterCode || "")),
-  ].length;
+  const currentIsMarked = isMCQ 
+    ? currentMCQAnswer?.isMarkedForReview 
+    : currentCodingAnswer?.isMarkedForReview;
+
+  const mcqStatuses = session.mcqAnswers.map((a) => ({
+    id: a.questionId,
+    isAnswered: a.selectedOption !== null,
+    isMarked: a.isMarkedForReview,
+    isVisited: a.isVisited,
+  }));
+
+  const codingStatuses = session.codingAnswers.map((a, index) => ({
+    id: a.questionId,
+    isAnswered: a.code !== (test.codingQuestions[index]?.starterCode || ""),
+    isMarked: a.isMarkedForReview,
+    isVisited: a.isVisited,
+  }));
+
+  const answeredCount = 
+    session.mcqAnswers.filter((a) => a.selectedOption !== null).length +
+    session.codingAnswers.filter((a, index) => 
+      a.code !== (test.codingQuestions[index]?.starterCode || "")
+    ).length;
+
+  const markedCount = 
+    session.mcqAnswers.filter((a) => a.isMarkedForReview).length +
+    session.codingAnswers.filter((a) => a.isMarkedForReview).length;
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* Sidebar - Question Navigation */}
-      <aside className="w-64 border-r border-border bg-card p-4 flex flex-col">
-        <div className="mb-4">
-          <h2 className="font-semibold text-lg truncate">{test.name}</h2>
-          <p className="text-sm text-muted-foreground">
-            {answeredCount}/{allQuestions.length} answered
-          </p>
-        </div>
-
-        <div className="flex-1 overflow-auto">
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase">
-              MCQ Questions
-            </p>
-            <div className="grid grid-cols-5 gap-1">
-              {test.mcqQuestions.map((q, index) => {
-                const answer = session.mcqAnswers.find((a) => a.questionId === q.id);
-                const isAnswered = answer?.selectedOption !== null;
-                const isCurrent = session.currentQuestionIndex === index;
-
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => setCurrentQuestion(index)}
-                    className={cn(
-                      "h-8 w-8 rounded text-sm font-medium transition-all",
-                      isCurrent
-                        ? "bg-primary text-primary-foreground"
-                        : isAnswered
-                        ? "bg-success/20 text-success border border-success"
-                        : "bg-muted text-muted-foreground hover:bg-accent"
-                    )}
-                  >
-                    {index + 1}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {test.codingQuestions.length > 0 && (
-            <div className="mt-4 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase">
-                Coding Questions
-              </p>
-              <div className="grid grid-cols-5 gap-1">
-                {test.codingQuestions.map((q, index) => {
-                  const globalIndex = test.mcqQuestions.length + index;
-                  const answer = session.codingAnswers.find((a) => a.questionId === q.id);
-                  const isAnswered = answer?.code !== q.starterCode;
-                  const isCurrent = session.currentQuestionIndex === globalIndex;
-
-                  return (
-                    <button
-                      key={q.id}
-                      onClick={() => setCurrentQuestion(globalIndex)}
-                      className={cn(
-                        "h-8 w-8 rounded text-sm font-medium transition-all",
-                        isCurrent
-                          ? "bg-primary text-primary-foreground"
-                          : isAnswered
-                          ? "bg-success/20 text-success border border-success"
-                          : "bg-muted text-muted-foreground hover:bg-accent"
-                      )}
-                    >
-                      C{index + 1}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-auto space-y-3 pt-4 border-t">
-          <AutosaveIndicator status={autosaveStatus} lastSaved={session.lastAutosave} />
-          <Button
-            variant="gradient"
-            className="w-full"
-            onClick={() => setShowSubmitDialog(true)}
-          >
-            <Send className="mr-2 h-4 w-4" />
-            Submit Test
-          </Button>
-        </div>
-      </aside>
+    <div ref={containerRef} className="flex h-screen bg-background">
+      {/* Sidebar - Question Navigation (Desktop) */}
+      <div className="hidden md:flex">
+        <QuestionNavigation
+          mcqCount={test.mcqQuestions.length}
+          codingCount={test.codingQuestions.length}
+          currentIndex={session.currentQuestionIndex}
+          mcqStatuses={mcqStatuses}
+          codingStatuses={codingStatuses}
+          onQuestionSelect={setCurrentQuestion}
+        />
+      </div>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex items-center justify-between border-b border-border bg-card px-6 py-3">
-          <div className="flex items-center gap-4">
+        <header className="flex items-center justify-between border-b border-border bg-card px-4 md:px-6 py-3">
+          <div className="flex items-center gap-2 md:gap-4">
             <Badge variant={isMCQ ? "secondary" : "outline"} className="gap-1">
               {isMCQ ? <FileText className="h-3 w-3" /> : <Code className="h-3 w-3" />}
               {isMCQ ? "MCQ" : "Coding"}
             </Badge>
             <span className="text-sm text-muted-foreground">
-              Question {session.currentQuestionIndex + 1} of {allQuestions.length}
+              Q {session.currentQuestionIndex + 1}/{allQuestions.length}
             </span>
+            <AutosaveIndicator status={autosaveStatus} lastSaved={session.lastAutosave} />
           </div>
-          <TimerDisplay remainingSeconds={session.remainingTime} />
+          <div className="flex items-center gap-2 md:gap-4">
+            <TimerDisplay remainingSeconds={session.remainingTime} />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+              className="hidden md:flex"
+            >
+              {isFullscreen ? (
+                <Minimize className="h-4 w-4" />
+              ) : (
+                <Maximize className="h-4 w-4" />
+              )}
+            </Button>
+            <Button
+              variant="gradient"
+              size="sm"
+              onClick={() => setShowSubmitDialog(true)}
+              className="hidden md:flex"
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Submit
+            </Button>
+          </div>
         </header>
 
         {/* Question Content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-4 md:p-6">
           {isMCQ ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  {(currentQuestion as typeof test.mcqQuestions[0]).question}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <RadioGroup
-                  value={currentMCQAnswer?.selectedOption?.toString() || ""}
-                  onValueChange={(value) =>
-                    saveMCQAnswer(currentQuestion.id, parseInt(value))
-                  }
-                >
-                  {(currentQuestion as typeof test.mcqQuestions[0]).options.map(
-                    (option, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center space-x-3 rounded-lg border p-4 hover:bg-accent/50 cursor-pointer"
-                        onClick={() => saveMCQAnswer(currentQuestion.id, index)}
-                      >
-                        <RadioGroupItem value={index.toString()} id={`option-${index}`} />
-                        <Label htmlFor={`option-${index}`} className="flex-1 cursor-pointer">
-                          {option}
-                        </Label>
-                      </div>
-                    )
-                  )}
-                </RadioGroup>
-              </CardContent>
-            </Card>
+            // MCQ Full-screen layout
+            <div className="max-w-3xl mx-auto">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-4">
+                    <CardTitle className="text-lg">
+                      {(currentQuestion as typeof test.mcqQuestions[0]).question}
+                    </CardTitle>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Label htmlFor="mark-review" className="text-sm text-muted-foreground">
+                        Mark for review
+                      </Label>
+                      <Switch
+                        id="mark-review"
+                        checked={currentIsMarked}
+                        onCheckedChange={() => toggleMarkForReview(currentQuestion.id)}
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <RadioGroup
+                    value={currentMCQAnswer?.selectedOption?.toString() || ""}
+                    onValueChange={(value) =>
+                      saveMCQAnswer(currentQuestion.id, parseInt(value))
+                    }
+                  >
+                    {(currentQuestion as typeof test.mcqQuestions[0]).options.map(
+                      (option, index) => (
+                        <div
+                          key={index}
+                          className={cn(
+                            "flex items-center space-x-3 rounded-lg border p-4 cursor-pointer transition-all",
+                            currentMCQAnswer?.selectedOption === index
+                              ? "border-primary bg-primary/5"
+                              : "hover:bg-accent/50"
+                          )}
+                          onClick={() => saveMCQAnswer(currentQuestion.id, index)}
+                        >
+                          <RadioGroupItem value={index.toString()} id={`option-${index}`} />
+                          <Label htmlFor={`option-${index}`} className="flex-1 cursor-pointer">
+                            {option}
+                          </Label>
+                        </div>
+                      )
+                    )}
+                  </RadioGroup>
+                </CardContent>
+              </Card>
+            </div>
           ) : (
-            <div className="grid grid-cols-2 gap-6 h-full">
+            // Coding Split-screen layout
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 h-full">
               {/* Problem Description */}
               <Card className="overflow-auto">
                 <CardHeader>
-                  <CardTitle>{(currentQuestion as typeof test.codingQuestions[0]).title}</CardTitle>
-                  <Badge variant={(currentQuestion as typeof test.codingQuestions[0]).difficulty}>
-                    {(currentQuestion as typeof test.codingQuestions[0]).difficulty}
-                  </Badge>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <CardTitle>{(currentQuestion as typeof test.codingQuestions[0]).title}</CardTitle>
+                      <Badge variant={(currentQuestion as typeof test.codingQuestions[0]).difficulty} className="mt-2">
+                        {(currentQuestion as typeof test.codingQuestions[0]).difficulty}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Label htmlFor="mark-review-coding" className="text-sm text-muted-foreground">
+                        Review
+                      </Label>
+                      <Switch
+                        id="mark-review-coding"
+                        checked={currentIsMarked}
+                        onCheckedChange={() => toggleMarkForReview(currentQuestion.id)}
+                      />
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="prose prose-sm max-w-none">
                   <p className="whitespace-pre-wrap">
@@ -302,12 +394,13 @@ export default function TestTaking() {
               </Card>
 
               {/* Code Editor */}
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 min-h-[400px]">
                 <CodeEditor
                   value={currentCodingAnswer?.code || ""}
                   onChange={(code) => saveCodingAnswer(currentQuestion.id, code)}
                   language={(currentQuestion as typeof test.codingQuestions[0]).language}
-                  height="350px"
+                  height="300px"
+                  className="flex-1"
                 />
                 <div className="flex items-center gap-2">
                   <Button onClick={runCode} variant="outline">
@@ -316,7 +409,7 @@ export default function TestTaking() {
                   </Button>
                 </div>
                 {codeOutput && (
-                  <Card className="flex-1">
+                  <Card>
                     <CardHeader className="py-2">
                       <CardTitle className="text-sm">Output</CardTitle>
                     </CardHeader>
@@ -331,44 +424,108 @@ export default function TestTaking() {
         </div>
 
         {/* Footer Navigation */}
-        <footer className="flex items-center justify-between border-t border-border bg-card px-6 py-3">
-          <Button
-            variant="outline"
-            onClick={prevQuestion}
-            disabled={session.currentQuestionIndex === 0}
-          >
-            <ChevronLeft className="mr-2 h-4 w-4" />
-            Previous
-          </Button>
-          <Button
-            onClick={nextQuestion}
-            disabled={session.currentQuestionIndex === allQuestions.length - 1}
-          >
-            Next
-            <ChevronRight className="ml-2 h-4 w-4" />
-          </Button>
+        <footer className="border-t border-border bg-card px-4 md:px-6 py-3">
+          <div className="flex items-center justify-between">
+            <Button
+              variant="outline"
+              onClick={prevQuestion}
+              disabled={session.currentQuestionIndex === 0}
+            >
+              <ChevronLeft className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Previous</span>
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => toggleMarkForReview(currentQuestion.id)}
+              className={cn(
+                "gap-2",
+                currentIsMarked && "text-warning"
+              )}
+            >
+              <Flag className={cn("h-4 w-4", currentIsMarked && "fill-warning")} />
+              <span className="hidden sm:inline">
+                {currentIsMarked ? "Marked" : "Mark for Review"}
+              </span>
+            </Button>
+
+            <Button
+              onClick={nextQuestion}
+              disabled={session.currentQuestionIndex === allQuestions.length - 1}
+            >
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
         </footer>
+
+        {/* Mobile Bottom Navigation */}
+        <div className="md:hidden">
+          <QuestionNavigation
+            mcqCount={test.mcqQuestions.length}
+            codingCount={test.codingQuestions.length}
+            currentIndex={session.currentQuestionIndex}
+            mcqStatuses={mcqStatuses}
+            codingStatuses={codingStatuses}
+            onQuestionSelect={setCurrentQuestion}
+            variant="bottom"
+          />
+          <div className="p-4 border-t bg-card">
+            <Button
+              variant="gradient"
+              className="w-full"
+              onClick={() => setShowSubmitDialog(true)}
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Submit Test
+            </Button>
+          </div>
+        </div>
       </main>
 
       {/* Submit Confirmation Dialog */}
       <AlertDialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Submit Test?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have answered {answeredCount} out of {allQuestions.length} questions.
-              {answeredCount < allQuestions.length && (
-                <span className="block mt-2 text-warning">
-                  Warning: You have {allQuestions.length - answeredCount} unanswered questions.
-                </span>
-              )}
-              <span className="block mt-2">
-                Are you sure you want to submit? This action cannot be undone.
-              </span>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-warning" />
+              Submit Test?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p>
+                  You are about to submit the test. Please review your answers before proceeding.
+                </p>
+                <div className="rounded-lg bg-muted p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Questions Answered:</span>
+                    <span className="font-medium">{answeredCount}/{allQuestions.length}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Marked for Review:</span>
+                    <span className="font-medium text-warning">{markedCount}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Unanswered:</span>
+                    <span className="font-medium text-destructive">
+                      {allQuestions.length - answeredCount}
+                    </span>
+                  </div>
+                </div>
+                {answeredCount < allQuestions.length && (
+                  <p className="text-sm text-destructive">
+                    Warning: You have unanswered questions. Are you sure you want to submit?
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  This action cannot be undone. Once submitted, you cannot modify your answers.
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Continue Test</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleSubmit}>Submit Test</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
