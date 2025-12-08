@@ -28,7 +28,7 @@ import CandidateCompleted from "@/pages/candidate/CandidateCompleted";
 import TestInstructions from "@/pages/candidate/TestInstructions";
 import TestTaking from "@/pages/candidate/TestTaking";
 import TestSubmitted from "@/pages/candidate/TestSubmitted";
-import CandidateReport from "@/pages/candidate/CandidateReport";
+
 
 import NotFound from "@/pages/NotFound";
 
@@ -64,7 +64,6 @@ const App = () => (
             <Route path="/candidate/completed" element={<CandidateCompleted />} />
             <Route path="/candidate/test/:assignmentId/start" element={<TestInstructions />} />
             <Route path="/candidate/test/:assignmentId/submitted" element={<TestSubmitted />} />
-            <Route path="/candidate/report/:assignmentId" element={<CandidateReport />} />
           </Route>
 
           {/* Test Taking - Full Screen (No Layout) */}

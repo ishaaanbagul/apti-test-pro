@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { TimerDisplay } from "@/components/common/TimerDisplay";
 import { AutosaveIndicator } from "@/components/common/AutosaveIndicator";
 import { CodeEditor } from "@/components/common/CodeEditor";
@@ -34,6 +35,7 @@ import {
   Maximize,
   Minimize,
   AlertTriangle,
+  CheckCircle,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -57,8 +59,10 @@ export default function TestTaking() {
   } = useCandidateTestStore();
 
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const [showCodeSubmitDialog, setShowCodeSubmitDialog] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [codeOutput, setCodeOutput] = useState<string>("");
+  const [codeInput, setCodeInput] = useState<string>("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -84,7 +88,7 @@ export default function TestTaking() {
     }
   }, [session?.remainingTime]);
 
-  // Autosave effect
+  // Autosave effect - every 5 seconds for coding
   useEffect(() => {
     if (!session || session.state !== "ACTIVE") return;
 
@@ -94,7 +98,7 @@ export default function TestTaking() {
         markAutosaved();
         setAutosaveStatus('saved');
       }, 500);
-    }, 15000);
+    }, 5000); // Changed to 5 seconds
 
     return () => clearInterval(autosaveInterval);
   }, [session, markAutosaved]);
@@ -169,7 +173,7 @@ export default function TestTaking() {
       if (!isCurrentlyFullscreen && session?.state === "ACTIVE") {
         setShowFullscreenWarning(true);
         toast({
-          title: "⚠️ Fullscreen exited",
+          title: "Fullscreen exited",
           description: "Please return to fullscreen mode. Exiting may be flagged as suspicious activity.",
           variant: "destructive",
         });
@@ -235,8 +239,20 @@ export default function TestTaking() {
   const runCode = () => {
     setCodeOutput("Running...\n");
     setTimeout(() => {
-      setCodeOutput("Test Case 1: Passed ✓\nTest Case 2: Passed ✓\n\nAll test cases passed!");
+      setCodeOutput(`Input: ${codeInput || "(empty)"}\n\nOutput:\nTest Case 1: Passed ✓\nTest Case 2: Passed ✓\n\nAll test cases passed!`);
     }, 1000);
+  };
+
+  const handleSubmitCode = () => {
+    setShowCodeSubmitDialog(true);
+  };
+
+  const confirmSubmitCode = () => {
+    setShowCodeSubmitDialog(false);
+    toast({
+      title: "Code Submitted",
+      description: "Your code has been submitted successfully for this question.",
+    });
   };
 
   if (!session || !test || session.state !== "ACTIVE") {
@@ -393,10 +409,10 @@ export default function TestTaking() {
               </Card>
             </div>
           ) : (
-            // Coding Split-screen layout
+            // Coding Split-screen layout with larger editor
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 h-full">
               {/* Problem Description */}
-              <Card className="overflow-auto">
+              <Card className="overflow-auto max-h-[calc(100vh-200px)]">
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -433,31 +449,55 @@ export default function TestTaking() {
                 </CardContent>
               </Card>
 
-              {/* Code Editor */}
-              <div className="flex flex-col gap-4 min-h-[400px]">
+              {/* Code Editor Section */}
+              <div className="flex flex-col gap-4 min-h-[500px]">
+                {/* Run/Submit buttons above editor */}
+                <div className="flex items-center gap-2">
+                  <Button onClick={runCode} variant="outline" className="gap-2">
+                    <Play className="h-4 w-4" />
+                    Run Code
+                  </Button>
+                  <Button onClick={handleSubmitCode} className="gap-2">
+                    <CheckCircle className="h-4 w-4" />
+                    Submit Code
+                  </Button>
+                </div>
+
+                {/* Larger Code Editor */}
                 <CodeEditor
                   value={currentCodingAnswer?.code || ""}
                   onChange={(code) => saveCodingAnswer(currentQuestion.id, code)}
                   language={(currentQuestion as typeof test.codingQuestions[0]).language}
-                  height="300px"
+                  height="400px"
                   className="flex-1"
                 />
-                <div className="flex items-center gap-2">
-                  <Button onClick={runCode} variant="outline">
-                    <Play className="mr-2 h-4 w-4" />
-                    Run Code
-                  </Button>
-                </div>
-                {codeOutput && (
+
+                {/* Input and Output boxes side by side */}
+                <div className="grid grid-cols-2 gap-4">
                   <Card>
-                    <CardHeader className="py-2">
-                      <CardTitle className="text-sm">Output</CardTitle>
+                    <CardHeader className="py-2 px-4">
+                      <CardTitle className="text-sm">Input</CardTitle>
                     </CardHeader>
-                    <CardContent className="py-2">
-                      <pre className="text-sm whitespace-pre-wrap font-mono">{codeOutput}</pre>
+                    <CardContent className="p-4 pt-0">
+                      <Textarea
+                        placeholder="Enter custom input here..."
+                        value={codeInput}
+                        onChange={(e) => setCodeInput(e.target.value)}
+                        className="font-mono text-sm min-h-[100px]"
+                      />
                     </CardContent>
                   </Card>
-                )}
+                  <Card>
+                    <CardHeader className="py-2 px-4">
+                      <CardTitle className="text-sm">Output</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                      <pre className="text-sm whitespace-pre-wrap font-mono bg-muted p-3 rounded min-h-[100px]">
+                        {codeOutput || "Run your code to see output..."}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
             </div>
           )}
@@ -567,6 +607,26 @@ export default function TestTaking() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleSubmit}>Submit Test</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Code Submit Confirmation Dialog */}
+      <AlertDialog open={showCodeSubmitDialog} onOpenChange={setShowCodeSubmitDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-primary" />
+              Submit Code?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to submit your code for this question? 
+              You can still modify it before submitting the entire test.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSubmitCode}>Submit Code</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

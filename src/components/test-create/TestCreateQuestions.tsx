@@ -5,6 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -13,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, Plus, X, Check } from "lucide-react";
+import { Search, Plus, X, Check, Sparkles } from "lucide-react";
 
 export function TestCreateQuestions() {
   const {
@@ -25,15 +34,26 @@ export function TestCreateQuestions() {
   } = useTestStore();
   const [mcqSearch, setMcqSearch] = useState("");
   const [codingSearch, setCodingSearch] = useState("");
+  const [languageFilter, setLanguageFilter] = useState<string>("all");
+  const [difficultyFilter, setDifficultyFilter] = useState<string>("all");
+  const [jobDescription, setJobDescription] = useState("");
+  const [extractedSkills, setExtractedSkills] = useState<string[]>([]);
+  const [showSkills, setShowSkills] = useState(false);
+  const [customPoints, setCustomPoints] = useState<Record<string, number>>({});
 
   const selectedMCQIds = testCreation.selectedMCQs.map((q) => q.id);
   const selectedCodingIds = testCreation.selectedCoding.map((q) => q.id);
 
-  const filteredMCQs = availableMCQs.filter(
-    (q) =>
+  const filteredMCQs = availableMCQs.filter((q) => {
+    const matchesSearch =
       q.question.toLowerCase().includes(mcqSearch.toLowerCase()) ||
-      q.tags.some((t) => t.toLowerCase().includes(mcqSearch.toLowerCase()))
-  );
+      q.tags.some((t) => t.toLowerCase().includes(mcqSearch.toLowerCase()));
+    const matchesDifficulty = difficultyFilter === "all" || q.difficulty === difficultyFilter;
+    const matchesLanguage = languageFilter === "all" || q.tags.some((t) => 
+      t.toLowerCase().includes(languageFilter.toLowerCase())
+    );
+    return matchesSearch && matchesDifficulty && matchesLanguage;
+  });
 
   const filteredCoding = availableCodingQuestions.filter(
     (q) =>
@@ -45,7 +65,8 @@ export function TestCreateQuestions() {
     if (selectedMCQIds.includes(question.id)) {
       removeMCQQuestion(question.id);
     } else {
-      addMCQQuestion(question);
+      const points = customPoints[question.id] || question.points;
+      addMCQQuestion({ ...question, points });
     }
   };
 
@@ -53,7 +74,40 @@ export function TestCreateQuestions() {
     if (selectedCodingIds.includes(question.id)) {
       removeCodingQuestion(question.id);
     } else {
-      addCodingQuestion(question);
+      const points = customPoints[question.id] || question.points;
+      addCodingQuestion({ ...question, points });
+    }
+  };
+
+  const handlePointsChange = (questionId: string, points: number) => {
+    setCustomPoints((prev) => ({ ...prev, [questionId]: points }));
+  };
+
+  const extractSkills = () => {
+    // Mock skill extraction - in real app this would call an AI API
+    const mockSkills = [
+      "JavaScript",
+      "React",
+      "Node.js",
+      "SQL",
+      "REST API",
+      "Problem Solving",
+      "Data Structures",
+    ];
+    const randomSkills = mockSkills
+      .sort(() => Math.random() - 0.5)
+      .slice(0, Math.floor(Math.random() * 4) + 3);
+    setExtractedSkills(randomSkills);
+    setShowSkills(true);
+  };
+
+  const removeSkill = (skill: string) => {
+    setExtractedSkills((prev) => prev.filter((s) => s !== skill));
+  };
+
+  const addSkill = (skill: string) => {
+    if (skill.trim() && !extractedSkills.includes(skill.trim())) {
+      setExtractedSkills((prev) => [...prev, skill.trim()]);
     }
   };
 
@@ -61,6 +115,9 @@ export function TestCreateQuestions() {
     ...testCreation.selectedMCQs.map((q) => q.points),
     ...testCreation.selectedCoding.map((q) => q.points),
   ].reduce((a, b) => a + b, 0);
+
+  const languages = ["JavaScript", "Python", "Java", "C++", "SQL"];
+  const difficulties = ["easy", "medium", "hard"];
 
   return (
     <div className="space-y-6">
@@ -94,14 +151,95 @@ export function TestCreateQuestions() {
             <CardHeader>
               <CardTitle className="text-lg">MCQ Question Bank</CardTitle>
               <CardDescription>Select questions to add to your test</CardDescription>
-              <div className="relative mt-2">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search MCQ questions..."
-                  value={mcqSearch}
-                  onChange={(e) => setMcqSearch(e.target.value)}
-                  className="pl-10"
+              
+              {/* Filters */}
+              <div className="grid gap-4 mt-4 md:grid-cols-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search MCQ questions..."
+                    value={mcqSearch}
+                    onChange={(e) => setMcqSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select value={languageFilter} onValueChange={setLanguageFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Programming Language" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Languages</SelectItem>
+                    {languages.map((lang) => (
+                      <SelectItem key={lang} value={lang.toLowerCase()}>
+                        {lang}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={difficultyFilter} onValueChange={setDifficultyFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Difficulty Level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Difficulties</SelectItem>
+                    {difficulties.map((diff) => (
+                      <SelectItem key={diff} value={diff}>
+                        {diff.charAt(0).toUpperCase() + diff.slice(1)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Job Description & Skills Extraction */}
+              <div className="mt-4 space-y-3">
+                <Label>Job Description</Label>
+                <Textarea
+                  placeholder="Paste the job description here to extract required skills..."
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  rows={3}
                 />
+                <Button 
+                  variant="outline" 
+                  onClick={extractSkills}
+                  disabled={!jobDescription.trim()}
+                  className="gap-2"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Extract Skills
+                </Button>
+                
+                {showSkills && extractedSkills.length > 0 && (
+                  <div className="mt-3 p-4 rounded-lg bg-muted/50 space-y-2">
+                    <p className="text-sm font-medium">Extracted Skills:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {extractedSkills.map((skill) => (
+                        <Badge key={skill} variant="secondary" className="gap-1">
+                          {skill}
+                          <button
+                            onClick={() => removeSkill(skill)}
+                            className="ml-1 hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <Input
+                        placeholder="Add custom skill..."
+                        className="max-w-xs"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            addSkill((e.target as HTMLInputElement).value);
+                            (e.target as HTMLInputElement).value = "";
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -112,7 +250,7 @@ export function TestCreateQuestions() {
                     <TableHead>Question</TableHead>
                     <TableHead>Difficulty</TableHead>
                     <TableHead>Tags</TableHead>
-                    <TableHead>Points</TableHead>
+                    <TableHead className="w-24">Points</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -121,14 +259,14 @@ export function TestCreateQuestions() {
                     return (
                       <TableRow
                         key={q.id}
-                        className={isSelected ? "bg-accent/50" : "cursor-pointer hover:bg-muted/50"}
-                        onClick={() => toggleMCQ(q)}
+                        className={isSelected ? "bg-accent/50" : "hover:bg-muted/50"}
                       >
                         <TableCell>
                           <Button
                             variant={isSelected ? "default" : "outline"}
                             size="icon"
                             className="h-8 w-8"
+                            onClick={() => toggleMCQ(q)}
                           >
                             {isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                           </Button>
@@ -148,7 +286,16 @@ export function TestCreateQuestions() {
                             ))}
                           </div>
                         </TableCell>
-                        <TableCell>{q.points}</TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={1}
+                            className="w-20 h-8"
+                            value={customPoints[q.id] ?? q.points}
+                            onChange={(e) => handlePointsChange(q.id, parseInt(e.target.value) || q.points)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -181,7 +328,7 @@ export function TestCreateQuestions() {
                     <TableHead>Title</TableHead>
                     <TableHead>Difficulty</TableHead>
                     <TableHead>Language</TableHead>
-                    <TableHead>Points</TableHead>
+                    <TableHead className="w-24">Points</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -190,14 +337,14 @@ export function TestCreateQuestions() {
                     return (
                       <TableRow
                         key={q.id}
-                        className={isSelected ? "bg-accent/50" : "cursor-pointer hover:bg-muted/50"}
-                        onClick={() => toggleCoding(q)}
+                        className={isSelected ? "bg-accent/50" : "hover:bg-muted/50"}
                       >
                         <TableCell>
                           <Button
                             variant={isSelected ? "default" : "outline"}
                             size="icon"
                             className="h-8 w-8"
+                            onClick={() => toggleCoding(q)}
                           >
                             {isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                           </Button>
@@ -212,7 +359,16 @@ export function TestCreateQuestions() {
                           <Badge variant={q.difficulty}>{q.difficulty}</Badge>
                         </TableCell>
                         <TableCell>{q.language}</TableCell>
-                        <TableCell>{q.points}</TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={1}
+                            className="w-20 h-8"
+                            value={customPoints[q.id] ?? q.points}
+                            onChange={(e) => handlePointsChange(q.id, parseInt(e.target.value) || q.points)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </TableCell>
                       </TableRow>
                     );
                   })}
