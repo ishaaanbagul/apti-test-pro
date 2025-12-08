@@ -2,6 +2,14 @@ import { useTestStore } from "@/store/testStore";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Clock, FileText, Code, Users, CheckCircle } from "lucide-react";
 
 export function TestCreateReview() {
@@ -39,20 +47,6 @@ export function TestCreateReview() {
                 <p className="text-sm text-muted-foreground">Duration</p>
                 <p className="font-medium">{basicInfo.duration} minutes</p>
               </div>
-              <div className="md:col-span-2">
-                <p className="text-sm text-muted-foreground">Description</p>
-                <p className="font-medium">{basicInfo.description || "No description"}</p>
-              </div>
-              {basicInfo.tags.length > 0 && (
-                <div className="md:col-span-2">
-                  <p className="text-sm text-muted-foreground mb-2">Tags</p>
-                  <div className="flex flex-wrap gap-2">
-                    {basicInfo.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary">{tag}</Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -60,7 +54,7 @@ export function TestCreateReview() {
 
           {/* Questions Summary */}
           <div>
-            <h3 className="text-lg font-semibold mb-3">Questions</h3>
+            <h3 className="text-lg font-semibold mb-3">Questions Overview</h3>
             <div className="grid gap-4 md:grid-cols-4">
               <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-4">
                 <FileText className="h-5 w-5 text-primary" />
@@ -92,6 +86,75 @@ export function TestCreateReview() {
               </div>
             </div>
           </div>
+
+          <Separator />
+
+          {/* MCQ Questions List */}
+          {selectedMCQs.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-3">MCQ Questions</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">#</TableHead>
+                    <TableHead>Question</TableHead>
+                    <TableHead>Difficulty</TableHead>
+                    <TableHead>Points</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedMCQs.map((q, index) => (
+                    <TableRow key={q.id}>
+                      <TableCell>{index + 1}</TableCell>
+                      <TableCell className="max-w-md">
+                        <p className="truncate">{q.question}</p>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={q.difficulty}>{q.difficulty}</Badge>
+                      </TableCell>
+                      <TableCell>{q.points}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {/* Coding Questions List */}
+          {selectedCoding.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-3">Coding Questions</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">#</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Difficulty</TableHead>
+                    <TableHead>Language</TableHead>
+                    <TableHead>Points</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedCoding.map((q, index) => (
+                    <TableRow key={q.id}>
+                      <TableCell>{index + 1}</TableCell>
+                      <TableCell>
+                        <p className="font-medium">{q.title}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-xs">
+                          {q.description.slice(0, 60)}...
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={q.difficulty}>{q.difficulty}</Badge>
+                      </TableCell>
+                      <TableCell>{q.language}</TableCell>
+                      <TableCell>{q.points}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
 
           <Separator />
 
