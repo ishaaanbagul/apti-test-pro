@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -22,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, Plus, X, Check, Sparkles } from "lucide-react";
+import { Search, Plus, X, Check } from "lucide-react";
 
 export function TestCreateQuestions() {
   const {
@@ -36,9 +34,6 @@ export function TestCreateQuestions() {
   const [codingSearch, setCodingSearch] = useState("");
   const [languageFilter, setLanguageFilter] = useState<string>("all");
   const [difficultyFilter, setDifficultyFilter] = useState<string>("all");
-  const [jobDescription, setJobDescription] = useState("");
-  const [extractedSkills, setExtractedSkills] = useState<string[]>([]);
-  const [showSkills, setShowSkills] = useState(false);
   const [customPoints, setCustomPoints] = useState<Record<string, number>>({});
 
   const selectedMCQIds = testCreation.selectedMCQs.map((q) => q.id);
@@ -81,34 +76,6 @@ export function TestCreateQuestions() {
 
   const handlePointsChange = (questionId: string, points: number) => {
     setCustomPoints((prev) => ({ ...prev, [questionId]: points }));
-  };
-
-  const extractSkills = () => {
-    // Mock skill extraction - in real app this would call an AI API
-    const mockSkills = [
-      "JavaScript",
-      "React",
-      "Node.js",
-      "SQL",
-      "REST API",
-      "Problem Solving",
-      "Data Structures",
-    ];
-    const randomSkills = mockSkills
-      .sort(() => Math.random() - 0.5)
-      .slice(0, Math.floor(Math.random() * 4) + 3);
-    setExtractedSkills(randomSkills);
-    setShowSkills(true);
-  };
-
-  const removeSkill = (skill: string) => {
-    setExtractedSkills((prev) => prev.filter((s) => s !== skill));
-  };
-
-  const addSkill = (skill: string) => {
-    if (skill.trim() && !extractedSkills.includes(skill.trim())) {
-      setExtractedSkills((prev) => [...prev, skill.trim()]);
-    }
   };
 
   const totalPoints = [
@@ -191,56 +158,6 @@ export function TestCreateQuestions() {
                 </Select>
               </div>
 
-              {/* Job Description & Skills Extraction */}
-              <div className="mt-4 space-y-3">
-                <Label>Job Description</Label>
-                <Textarea
-                  placeholder="Paste the job description here to extract required skills..."
-                  value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
-                  rows={3}
-                />
-                <Button 
-                  variant="outline" 
-                  onClick={extractSkills}
-                  disabled={!jobDescription.trim()}
-                  className="gap-2"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Extract Skills
-                </Button>
-                
-                {showSkills && extractedSkills.length > 0 && (
-                  <div className="mt-3 p-4 rounded-lg bg-muted/50 space-y-2">
-                    <p className="text-sm font-medium">Extracted Skills:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {extractedSkills.map((skill) => (
-                        <Badge key={skill} variant="secondary" className="gap-1">
-                          {skill}
-                          <button
-                            onClick={() => removeSkill(skill)}
-                            className="ml-1 hover:text-destructive"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      <Input
-                        placeholder="Add custom skill..."
-                        className="max-w-xs"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            addSkill((e.target as HTMLInputElement).value);
-                            (e.target as HTMLInputElement).value = "";
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
             </CardHeader>
             <CardContent>
               <Table>
