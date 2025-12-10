@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useTestStore } from "@/store/testStore";
 import { Badge } from "@/components/ui/badge";
@@ -27,13 +27,28 @@ import {
   Clock,
   FileText,
 } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { Doughnut } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip as ChartTooltip,
+  Legend as ChartLegend,
+  Title as ChartTitle,
+} from "chart.js";
+import styles from "./ReportDetails.module.css";
+
+ChartJS.register(ArcElement, ChartTooltip, ChartLegend, ChartTitle);
 
 export default function ReportDetails() {
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const { assignments, tests } = useTestStore();
   const [marksDeduction, setMarksDeduction] = useState<number>(0);
   const [proctoringEnabled, setProctoringEnabled] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState<boolean>(false);
+
+  const [proctorData, setProctorData] = useState<any | null>(null);
 
   const assignment = assignments.find((a) => a.id === assignmentId);
   const test = assignment ? tests.find((t) => t.id === assignment.testId) : null;
@@ -94,23 +109,141 @@ export default function ReportDetails() {
     { name: "Lost", value: Math.max(0, totalMaxMarks - totalObtained), color: "hsl(210, 20%, 80%)" },
   ].filter(d => d.value > 0);
 
+  // Fetch detailed proctoring / backend data (fallback to mock if API fails)
+  useEffect(() => {
+    let mounted = true;
+    async function fetchReport() {
+      try {
+        setIsLoading(true);
+        setDataError(null);
+        const res = await fetch(`/api/reports/${assignmentId}`);
+        if (!res.ok) throw new Error(`Failed to fetch report (${res.status})`);
+        const json = await res.json();
+        if (!mounted) return;
+        // Expecting API to return mcqResults, codingResults, proctoring
+        // If absent, keep using local mock data defined above
+        if (json.proctoring) setProctorData(json.proctoring);
+        // If backend returns more precise scoring, you could update mcqResults/codingResults here
+      } catch (err: any) {
+        if (!mounted) return;
+        setDataError(err.message || "Could not load report data");
+        // keep using mock data
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    }
+    fetchReport();
+    return () => { mounted = false; };
+  }, [assignmentId]);
+
+  // Chart.js datasets
+  const mcqChartData = {
+    labels: ["Obtained", "Remaining"],
+    datasets: [
+      {
+        data: [mcqObtained, Math.max(0, mcqMaxMarks - mcqObtained)],
+        backgroundColor: ["#1e90ff", "#cfe8ff"],
+        hoverBackgroundColor: ["#1c86ee", "#bfe0ff"],
+      },
+    ],
+  };
+
+  const codingChartData = codingMaxMarks > 0 ? {
+    labels: ["Obtained", "Remaining"],
+    datasets: [
+      {
+        data: [codingObtained, Math.max(0, codingMaxMarks - codingObtained)],
+        backgroundColor: ["#22c55e", "#d6f5e0"],
+        hoverBackgroundColor: ["#16a34a", "#c2efce"],
+      },
+    ],
+  } : null;
+
+  const proctorChartData = proctorData ? {
+    labels: ["Compliant", "Flagged"],
+    datasets: [
+      {
+        data: [Math.max(0, 100 - (proctorData.focusDeviation || 0)), proctorData.flaggedFaces || 0],
+        backgroundColor: ["#ffb020", "#ff7a00"],
+      },
+    ],
+  } : null;
+
+  // PDF generation
+  async function downloadReport() {
+    try {
+      setPdfLoading(true);
+      const res = await fetch(`/api/reports/${assignmentId}/generate-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includeProctoring: proctoringEnabled }),
+      });
+      if (!res.ok) throw new Error("Server error while generating PDF");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${assignment.candidateName || 'report'}-report.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error(err);
+      setDataError(err.message || "Failed to download PDF");
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <Button asChild variant="ghost" size="sm" className="-ml-2">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <Button asChild variant="ghost" size="sm" className="-ml-2 p-0">
             <Link to="/reports">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Reports
             </Link>
           </Button>
+          <h2 className="text-2xl font-bold">EXAMINATION REPORT</h2>
+          <p className="text-sm text-muted-foreground">Comprehensive Exam Performance Analysis</p>
         </div>
-        <Button className="bg-[hsl(210,100%,50%)] hover:bg-[hsl(210,100%,45%)] text-white">
-          <FileDown className="mr-2 h-4 w-4" />
-          Download Report
-        </Button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={proctoringEnabled}
+              onChange={(e) => setProctoringEnabled(e.target.checked)}
+              className="w-4 h-4"
+            />
+            Include Proctoring Data
+          </label>
+          <Button
+            className="bg-[hsl(210,100%,50%)] hover:bg-[hsl(210,100%,45%)] text-white"
+            onClick={downloadReport}
+            disabled={pdfLoading}
+          >
+            <FileDown className="mr-2 h-4 w-4" />
+            {pdfLoading ? "Generating..." : "Download Report"}
+          </Button>
+        </div>
       </div>
+
+      {/* Loading / Error */}
+      {isLoading && (
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <svg className="animate-spin h-5 w-5 text-[hsl(210,100%,50%)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+          </svg>
+          Loading report data...
+        </div>
+      )}
+      {dataError && (
+        <div className="text-sm text-destructive">Error: {dataError}</div>
+      )}
 
       {/* Candidate Name Header */}
       <div className="bg-gradient-to-r from-[hsl(210,100%,50%)] to-[hsl(210,70%,60%)] rounded-xl p-6 text-white">
@@ -217,83 +350,69 @@ export default function ReportDetails() {
           </CardContent>
         </Card>
 
-        {/* Donut Chart */}
+        {/* Donut Charts */}
         <Card className="border-[hsl(210,70%,80%)]">
           <CardHeader className="bg-[hsl(210,100%,50%)] text-white rounded-t-lg">
-            <CardTitle className="text-lg">Score Distribution</CardTitle>
+            <CardTitle className="text-lg">Section Performance</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={2}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col items-center">
+                <div className={styles.chartContainer}>
+                  <Doughnut data={mcqChartData} options={{ maintainAspectRatio: true, plugins: { title: { display: true, text: `MCQ (${mcqObtained}/${mcqMaxMarks})` } } }} />
+                </div>
+                <p className="text-sm mt-2">Correct: <strong>{mcqCorrect}</strong> &nbsp; Wrong: <strong>{mcqTotal - mcqCorrect}</strong></p>
+              </div>
+
+              <div className="flex flex-col items-center">
+                <div className={styles.chartContainer}>
+                  {codingChartData ? (
+                    <Doughnut data={codingChartData} options={{ maintainAspectRatio: true, plugins: { title: { display: true, text: `Coding (${codingObtained}/${codingMaxMarks})` } } }} />
+                  ) : (
+                    <div className="text-sm text-muted-foreground p-4">No coding marks available. Attempted: <strong>{codingResults.length}</strong></div>
+                  )}
+                </div>
+                {codingChartData && <p className="text-sm mt-2">Attempted: <strong>{codingResults.length}</strong></p>}
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Proctoring Deduction */}
-      <Card className="border-[hsl(210,70%,80%)] bg-[hsl(210,50%,98%)]">
-        <CardHeader>
-          <CardTitle className="text-lg text-[hsl(210,100%,40%)]">Proctoring Adjustment</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <div className="flex-1 max-w-xs">
-              <Label htmlFor="deduction">Marks Deduction</Label>
-              <Input
-                id="deduction"
-                type="number"
-                min={0}
-                value={marksDeduction}
-                onChange={(e) => setMarksDeduction(parseInt(e.target.value) || 0)}
-                className="mt-1"
-              />
-            </div>
-            {proctoringEnabled && marksDeduction > 0 && (
-              <div className="flex items-center gap-2 mt-6">
-                <span className="text-destructive font-medium line-through">
-                  -{marksDeduction} marks
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setProctoringEnabled(false)}
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+      {/* Proctoring Details (Optional) */}
+      {proctoringEnabled && (
+        <Card className="border-[hsl(40,70%,80%)]">
+          <CardHeader>
+            <CardTitle className="text-lg text-[hsl(40,80%,30%)]">Proctoring Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-3 items-center">
+              <div>
+                <p className="text-xs text-muted-foreground">Flagged Faces</p>
+                <p className="font-medium">{proctorData?.flaggedFaces ?? 0}</p>
               </div>
-            )}
-            {!proctoringEnabled && marksDeduction > 0 && (
-              <Button
-                variant="outline"
-                className="mt-6"
-                onClick={() => setProctoringEnabled(true)}
-              >
-                Enable Deduction
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              <div>
+                <p className="text-xs text-muted-foreground">Focus Deviation</p>
+                <p className="font-medium">{proctorData?.focusDeviation != null ? `${proctorData.focusDeviation}%` : "-"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Cheating Events</p>
+                <p className="font-medium">{proctorData?.cheatingEvents ?? 0}</p>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              {proctorChartData ? (
+                <div className={styles.chartContainer}>
+                  <Doughnut data={proctorChartData} options={{ maintainAspectRatio: true, plugins: { title: { display: true, text: 'Proctoring Compliance' } } }} />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No proctoring analytics available for this candidate.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Separator />
 
