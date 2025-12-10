@@ -42,6 +42,7 @@ export interface Assignment {
   candidateId: string;
   candidateName: string;
   candidateEmail: string;
+  token?: string;
   scheduledStartTime: string;
   scheduledEndTime: string;
   status: 'pending' | 'in_progress' | 'completed' | 'expired';
