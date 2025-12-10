@@ -18,21 +18,26 @@ export function TestCreateAssign() {
   const { testCreation, addAssignment, removeAssignment } = useTestStore();
   const [candidateName, setCandidateName] = useState("");
   const [candidateEmail, setCandidateEmail] = useState("");
+  const [candidateToken, setCandidateToken] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
   const handleAddCandidate = () => {
     if (candidateName && candidateEmail && startDate && endDate) {
+      // if token not provided, generate a simple fallback token
+      const tokenToUse = candidateToken && candidateToken.trim() ? candidateToken.trim() : `token-${Date.now()}`;
       addAssignment({
         testId: "",
         candidateId: `candidate-${Date.now()}`,
         candidateName,
         candidateEmail,
+        token: tokenToUse,
         scheduledStartTime: new Date(startDate).toISOString(),
         scheduledEndTime: new Date(endDate).toISOString(),
       });
       setCandidateName("");
       setCandidateEmail("");
+      setCandidateToken("");
     }
   };
 
@@ -95,6 +100,15 @@ export function TestCreateAssign() {
                 onChange={(e) => setCandidateEmail(e.target.value)}
               />
             </div>
+            <div className="flex-1 space-y-2">
+              <Label htmlFor="candidateToken">Token</Label>
+              <Input
+                id="candidateToken"
+                placeholder="Optional token (or leave blank to auto-generate)"
+                value={candidateToken}
+                onChange={(e) => setCandidateToken(e.target.value)}
+              />
+            </div>
             <Button
               onClick={handleAddCandidate}
               disabled={!candidateName || !candidateEmail || !startDate || !endDate}
@@ -111,6 +125,7 @@ export function TestCreateAssign() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Token</TableHead>
                   <TableHead>Schedule</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
@@ -120,6 +135,7 @@ export function TestCreateAssign() {
                   <TableRow key={assignment.candidateId}>
                     <TableCell className="font-medium">{assignment.candidateName}</TableCell>
                     <TableCell>{assignment.candidateEmail}</TableCell>
+                    <TableCell className="text-sm break-all">{assignment.token ?? "-"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {new Date(assignment.scheduledStartTime).toLocaleDateString()} -{" "}
                       {new Date(assignment.scheduledEndTime).toLocaleDateString()}
