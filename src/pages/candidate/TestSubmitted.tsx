@@ -30,12 +30,6 @@ export default function TestSubmitted() {
           </div>
           
           <div className="flex flex-col gap-3">
-            <Button asChild variant="gradient">
-              <Link to={`/candidate/report/${assignmentId}`}>
-                <FileText className="mr-2 h-4 w-4" />
-                View Results
-              </Link>
-            </Button>
             <Button asChild variant="outline">
               <Link to="/candidate/tests">
                 <Home className="mr-2 h-4 w-4" />
